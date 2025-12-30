@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"ShouldaClaimed/pkg/cli"
+	"github.com/A3-N/ShouldaClaimed/pkg/cli"
 )
 
 // GeneratePackage creates the NPM package based on the configuration.

@@ -7,8 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"ShouldaClaimed/pkg/cli"
-	"ShouldaClaimed/pkg/generator"
+	"github.com/A3-N/ShouldaClaimed/pkg/cli"
+	"github.com/A3-N/ShouldaClaimed/pkg/generator"
 )
 
 const banner = `

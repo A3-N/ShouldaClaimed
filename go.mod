@@ -1,4 +1,4 @@
-module ShouldaClaimed
+module github.com/A3-N/ShouldaClaimed
 
 go 1.25.5
 
