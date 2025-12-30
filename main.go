@@ -22,16 +22,17 @@ const banner = `
 ██ ▄▄██▪  ▄█▀▀█ ▐█·▐█ ▌▐▌▐█·▐▀▀▪▄▐█· ▐█▌
 ▐███▌▐█▌▐▌▐█ ▪▐▌▐█▌██ ██▌▐█▌▐█▄▄▌██. ██ 
 ·▀▀▀ .▀▀▀  ▀  ▀ ▀▀▀▀▀  █▪▀▀▀ ▀▀▀ ▀▀▀▀▀• 
+			github.com/A3-N
 `
 
 func main() {
+	fmt.Print(banner)
+	cli.PrintInfo("ShouldaClaimed CLI initialized")
+
 	if len(os.Args) < 2 {
 		printUsage()
 		os.Exit(1)
 	}
-
-	fmt.Print(banner)
-	cli.PrintInfo("ShouldaClaimed CLI initialized")
 
 	switch os.Args[1] {
 	case "create":
@@ -48,12 +49,8 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Print(banner)
-	fmt.Println("Usage: ShouldaClaimed <command> [flags]")
-	fmt.Println("\nCommands:")
-	fmt.Println("  create   Generate a package without publishing")
-	fmt.Println("  publish  Generate and publish a package")
-	fmt.Println("\nRun 'ShouldaClaimed <command> -h' for more information.")
+	fs := flag.NewFlagSet("ShouldaClaimed", flag.ContinueOnError)
+	cli.PrintCustomUsage(fs)
 }
 
 func handleCreate(args []string) {
@@ -61,7 +58,7 @@ func handleCreate(args []string) {
 	cfg, err := cli.ParseFlags(fs, args)
 	if err != nil {
 		cli.PrintError("Error parsing flags: %v", err)
-		fs.PrintDefaults()
+		cli.PrintCustomUsage(fs)
 		os.Exit(1)
 	}
 
@@ -79,7 +76,7 @@ func handlePublish(args []string) {
 	cfg, err := cli.ParseFlags(fs, args)
 	if err != nil {
 		cli.PrintError("Error parsing flags: %v", err)
-		fs.PrintDefaults()
+		cli.PrintCustomUsage(fs)
 		os.Exit(1)
 	}
 

